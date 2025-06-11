@@ -63,6 +63,7 @@ async function handleCommands(msg) {
 }
 
 // Moderação
+// Moderação
 async function moderarMensagem(msg) {
   const chat = await msg.getChat();
 
@@ -72,6 +73,7 @@ async function moderarMensagem(msg) {
   const raw = msg._data;
   const from = msg.author || msg.from;
 
+  // Verifica se é uma imagem
   const isImage =
     msg.hasMedia && msg.type === 'image' ||
     raw?.message?.imageMessage ||
@@ -79,20 +81,26 @@ async function moderarMensagem(msg) {
 
   if (isImage) {
     try {
-      await msg.delete(true); // Apagar p/ todos
-      await chat.sendMessage(`⚠️ @${from.replace('@c.us', '')}, fotos não são permitidas!`, {
-        mentions: [await client.getContactById(from)],
-      });
+      const participantes = await chat.getParticipants();
+      const remetente = participantes.find(p => p.id._serialized === from);
+      const isAdmin = remetente?.isAdmin || remetente?.isSuperAdmin;
 
-      if (!avisos[from]) avisos[from] = 0;
-      avisos[from]++;
-
-      if (avisos[from] >= 2) {
-        await chat.removeParticipants([from]);
-        await chat.sendMessage(`🚫 Usuário @${from.replace('@c.us', '')} removido por descumprir regras.`, {
+      if (!isAdmin) {
+        await msg.delete(true); // Apagar para todos
+        await chat.sendMessage(`⚠️ @${from.replace('@c.us', '')}, fotos não são permitidas para membros comuns!`, {
           mentions: [await client.getContactById(from)],
         });
-        avisos[from] = 0;
+
+        if (!avisos[from]) avisos[from] = 0;
+        avisos[from]++;
+
+        if (avisos[from] >= 2) {
+          await chat.removeParticipants([from]);
+          await chat.sendMessage(`🚫 Usuário @${from.replace('@c.us', '')} foi removido por descumprir as regras.`, {
+            mentions: [await client.getContactById(from)],
+          });
+          avisos[from] = 0;
+        }
       }
     } catch (err) {
       console.error('Erro ao moderar imagem:', err);
@@ -194,7 +202,7 @@ app.get('/', (req, res) => {
       <p>Depois que o QR for escaneado, esta tela ficará vazia.</p>
     `);
   } else {
-    res.send('<h1>🤖 Bot WhatsApp está conectado e ativo hehe!</h1>');
+    res.send('<h1>Bot WhatsApp oN ✅</h1>');
   }
 });
 
