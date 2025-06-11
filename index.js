@@ -1,5 +1,5 @@
 const express = require('express');
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 
 const app = express();
@@ -16,8 +16,9 @@ const client = new Client({
 });
 
 const seuNumero = '13988755893@c.us';
+const avisos = {}; // controle de avisos por usuário
 
-// Evento QR
+// QR Code
 client.on('qr', (qr) => {
   qrcode.toDataURL(qr, (err, url) => {
     if (err) return console.error(err);
@@ -26,7 +27,7 @@ client.on('qr', (qr) => {
   });
 });
 
-// Evento ready
+// Quando pronto
 client.on('ready', () => {
   console.log('✅ Shellzinha Private ON');
   qrCodeData = null;
@@ -39,7 +40,7 @@ client.on('ready', () => {
   iniciarIntervalos();
 });
 
-// Comandos e regras
+// Regras do grupo
 const regrasDoGrupo = `📌 *REGRAS DO GRUPO:*
 1️⃣ Sem *links*, *fotos* ou *vídeos*.
 2️⃣ Permitido: *áudios*, *stickers* e *textos* (máx. 35 palavras).
@@ -48,10 +49,7 @@ const regrasDoGrupo = `📌 *REGRAS DO GRUPO:*
 Obrigado por colaborar.
 `;
 
-async function moderarMensagem(msg) {
-  // Adicione aqui lógica de moderação futura
-}
-
+// Comandos
 async function handleCommands(msg) {
   const text = msg.body.trim().toLowerCase();
 
@@ -64,8 +62,46 @@ async function handleCommands(msg) {
   }
 }
 
-// Evento message (todas as mensagens recebidas)
-client.on('message', async msg => {
+// Moderação
+async function moderarMensagem(msg) {
+  const chat = await msg.getChat();
+
+  // Ignora fora de grupo
+  if (!chat.isGroup) return;
+
+  const raw = msg._data;
+  const from = msg.author || msg.from;
+
+  const isImage =
+    msg.hasMedia && msg.type === 'image' ||
+    raw?.message?.imageMessage ||
+    raw?.message?.viewOnceMessage?.message?.imageMessage;
+
+  if (isImage) {
+    try {
+      await msg.delete(true); // Apagar p/ todos
+      await chat.sendMessage(`⚠️ @${from.replace('@c.us', '')}, fotos não são permitidas!`, {
+        mentions: [await client.getContactById(from)],
+      });
+
+      if (!avisos[from]) avisos[from] = 0;
+      avisos[from]++;
+
+      if (avisos[from] >= 2) {
+        await chat.removeParticipants([from]);
+        await chat.sendMessage(`🚫 Usuário @${from.replace('@c.us', '')} removido por descumprir regras.`, {
+          mentions: [await client.getContactById(from)],
+        });
+        avisos[from] = 0;
+      }
+    } catch (err) {
+      console.error('Erro ao moderar imagem:', err);
+    }
+  }
+}
+
+// Mensagens recebidas
+client.on('message', async (msg) => {
   try {
     if (msg.fromMe) return;
 
@@ -76,17 +112,18 @@ client.on('message', async msg => {
   }
 });
 
-// Evento message_create (mensagens enviadas pelo próprio bot)
-client.on('message_create', async msg => {
+// Mensagens criadas pelo bot
+client.on('message_create', async (msg) => {
   try {
     if (!msg.fromMe) return;
+
     await handleCommands(msg);
   } catch (error) {
     console.error('Erro no evento message_create:', error);
   }
 });
 
-// Gerenciamento automático de grupos (fechar/abrir)
+// Fechar e abrir grupos por horário
 const horarioFechar = { hora: 4, minuto: 0 };
 const horarioAbrir = { hora: 8, minuto: 0 };
 let ultimoFechamento = null;
@@ -145,9 +182,10 @@ function iniciarIntervalos() {
   }, 20 * 60 * 1000);
 }
 
+// Inicializa
 client.initialize();
 
-// Página com QR code (usada no Render)
+// Página QR code (Render.com)
 app.get('/', (req, res) => {
   if (qrCodeData) {
     res.send(`
@@ -156,11 +194,11 @@ app.get('/', (req, res) => {
       <p>Depois que o QR for escaneado, esta tela ficará vazia.</p>
     `);
   } else {
-    res.send('<h1>🤖 Bot WhatsApp está conectado e ativo nov!</h1>');
+    res.send('<h1>🤖 Bot WhatsApp está conectado e ativo hehe!</h1>');
   }
 });
 
-// Mantém o Render ativo
+// Mantém o Render online
 app.listen(port, () => {
   console.log(`🌐 Servidor Express online na porta ${port}`);
 });
